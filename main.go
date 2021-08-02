@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"localhost/aurora/pkg/aurora"
-	"localhost/aurora/pkg/types"
+	"log"
 	"os"
 	"strings"
 	"time"
+
+	"localhost/aurora/pkg/aurora"
+	"localhost/aurora/pkg/types"
 
 	"github.com/mailgun/mailgun-go/v3"
 )
@@ -57,63 +60,70 @@ func readConfig() (*config, error) {
 }
 
 func main() {
+	outFile := flag.String("-output", "", "Write HTML notice to the specified output file")
+	deleteNotices := flag.Bool("-delete", false, "Delete notice")
+	txEmail := flag.Bool("-email", false, "Send email with the notice")
+	flag.Parse()
+
+	log.Printf("Reading config %q", configFile)
 	config, err := readConfig()
 	if err != nil {
-		fmt.Printf("Read config failed: %+v\n", err)
-		os.Exit(-1)
+		log.Fatalf("Read config failed: %+v", err)
 	}
 
-	aurora := aurora.Aurora{
+	aur := aurora.Aurora{
 		Config: &config.Aurora,
 	}
 
-	if err := aurora.Login(); err != nil {
-		fmt.Printf("Aurora login failed: %+v\n", err)
-		os.Exit(-1)
+	log.Printf("Logging in")
+	if err := aur.Login(); err != nil {
+		log.Fatalf("Aurora login failed: %+v", err)
 	}
 
-	notices, err := aurora.GetNotices()
+	log.Printf("Get notices")
+	notices, err := aur.GetNotices()
 	if err != nil {
-		fmt.Printf("Aurora get notices failed: %+v\n", err)
-		os.Exit(-1)
+		log.Fatalf("Aurora get notices failed: %+v", err)
 	}
+	log.Printf("Got %d notices", len(notices))
 
-	max := 0
-	for i, d := range notices {
+	var maxNotice *aurora.NoticesData
+	for _, d := range notices {
 		fmt.Printf("%d - %d - %s - %q\n", d.Id, d.Notice.Id, d.SendDate, d.Notice.Title)
-		if notices[max].Id < d.Id {
-			max = i
+		if maxNotice == nil || maxNotice.Id < d.Id {
+			maxNotice = &d
 		}
 	}
-	maxNotice := notices[max]
 
-	htmlDoc, err := aurora.GenHtml(maxNotice)
+	log.Printf("Generating HTML for notice ID: %d", maxNotice.Id)
+	htmlDoc, err := aur.GenHtml(maxNotice)
 	if err != nil {
-		fmt.Printf("Aurora gen html failed: %+v\n", err)
-		os.Exit(-1)
+		log.Fatalf("Aurora gen HTML failed: %+v", err)
 	}
 
-	htmlFileName := fmt.Sprintf("%d.html", maxNotice.Id)
-	fmt.Printf("Writing notice %d to file %s\n", maxNotice.Id, htmlFileName)
-	if err := os.WriteFile(htmlFileName, []byte(htmlDoc), 0o664); err != nil {
-		fmt.Printf("os WriteFile failed: %v\n", err)
-		os.Exit(-1)
+	if *outFile != "" {
+		log.Printf("Writing HTML notice ID %d to file %s", maxNotice.Id, *outFile)
+		if err := os.WriteFile(*outFile, []byte(htmlDoc), 0o664); err != nil {
+			log.Fatalf("os WriteFile failed: %v", err)
+		}
 	}
 
-	emailID, err := sendEmail(maxNotice.Notice.Title, htmlDoc, &(config.Email))
-	if err != nil {
-		fmt.Printf("Email send failed: %v\n", err)
-		os.Exit(-1)
+	if *txEmail {
+		log.Printf("Sending e-mail")
+		emailID, err := sendEmail(maxNotice.Notice.Title, htmlDoc, &(config.Email))
+		if err != nil {
+			log.Fatalf("Email send failed: %v", err)
+		}
+
+		log.Printf(">> Sent email ID: %v", emailID)
 	}
 
-	fmt.Printf(">> Send emailID: %v\n", emailID)
+	if *deleteNotices {
+		log.Printf("Deleting notice ID: %d", maxNotice.Id)
 
-	fmt.Printf(">> DEBUG: Not deleting...\n")
-	os.Exit(0)
-
-	aurora.DeleteIds([]int{maxNotice.Id})
-	if err != nil {
-		fmt.Printf("Aurora delete ID failed: %+v\n", err)
-		os.Exit(-1)
+		aur.DeleteIds([]int{maxNotice.Id})
+		if err != nil {
+			log.Fatalf("Aurora delete ID failed: %+v", err)
+		}
 	}
 }
