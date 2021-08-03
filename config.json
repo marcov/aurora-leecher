@@ -1,0 +1,15 @@
+{
+	"aurora" : {
+		"username" : "foo@bar.com",
+		"password" : "supersecret",
+		"userId":     1234,
+		"activityId": 6
+	},
+
+	"email" : {
+		"domain" : "your-mailgun-domain.com",
+		"apiKey" : "key-0123456789abcdef",
+		"from" : "Ol Dutur <oldutur@foo.bar>",
+		"to" : [ "foo@bar.com", "baz@caz.com" ]
+	}
+}
