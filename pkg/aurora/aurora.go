@@ -164,7 +164,7 @@ func (au *Aurora) GetNotice(id int) (*NoticeData, error) {
 func (au *Aurora) DeleteIds(ids []int) error {
 	for _, id := range ids {
 		idsToDelete := map[string][]int{
-			"id": {id},
+			"ids": {id},
 		}
 
 		reqRawData, err := json.Marshal(idsToDelete)

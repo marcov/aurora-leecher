@@ -150,10 +150,9 @@ func main() {
 		}
 
 		if *deleteNotices {
-			log.Printf("Deleting notice ID: %d", notice.Id)
+			log.Printf("Deleting notice ID: %d", fatNotice.Id)
 
-			aur.DeleteIds([]int{notice.Id})
-			if err != nil {
+			if err := aur.DeleteIds([]int{fatNotice.Id}); err != nil {
 				log.Fatalf("Aurora delete ID failed: %+v", err)
 			}
 		}
