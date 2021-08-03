@@ -4,7 +4,7 @@ type AuroraConfig struct {
 	Username   string
 	Password   string
 	UserId     int
-	ActivityId string
+	ActivityId int
 }
 
 type EmailConfig struct {
