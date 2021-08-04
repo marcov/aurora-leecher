@@ -94,7 +94,7 @@ func (au Aurora) Login() error {
 	return nil
 }
 
-func (au *Aurora) GetNotices() (map[string]NoticeData, error) {
+func (au *Aurora) CheckNotices() ([]int, error) {
 	noticeFilter := map[string]string{
 		"userId":     fmt.Sprintf("%d", au.Config.UserId),
 		"activityId": fmt.Sprintf("%d", au.Config.ActivityId),
@@ -116,33 +116,54 @@ func (au *Aurora) GetNotices() (map[string]NoticeData, error) {
 
 	//fmt.Printf("Response: %s\n", string(buf))
 
-	var resp struct {
+	// Data can be either a map with "key": NoticeData entries, or just an array
+	// of NoticeData.
+	var respAsMap struct {
 		Message string                `json:"message"`
 		Data    map[string]NoticeData `json:"data"`
 	}
-	//var resp interface{}
 
-	if err := json.Unmarshal(buf, &resp); err != nil {
-		return nil, fmt.Errorf("JSON unmarshal failed: %w", err)
+	var data []NoticeData
+
+	if err := json.Unmarshal(buf, &respAsMap); err == nil {
+		for _, n := range respAsMap.Data {
+			data = append(data, n)
+		}
+	} else {
+		log.Printf("JSON unmarshal key-value format failed: %v, trying array format", err)
+
+		var respAsArray struct {
+			Message string       `json:"message"`
+			Data    []NoticeData `json:"data"`
+		}
+
+		if err := json.Unmarshal(buf, &respAsArray); err != nil {
+			return nil, fmt.Errorf("JSON unmarshal array format failed: %w", err)
+		}
+
+		data = respAsArray.Data
 	}
 
-	//fmt.Printf("%+v\n", resp)
+	ids := []int{}
 
-	if len(resp.Data) == 0 {
-		return nil, fmt.Errorf("no data in HTTP response, nothing to do: %s", buf)
+	for _, n := range data {
+		ids = append(ids, n.Id)
+		log.Printf(`Notice Entry:
+    ID: %d
+    date %s`, n.Id, n.SendDate)
 	}
 
-	return resp.Data, nil
+	return ids, nil
 }
 
-func (au *Aurora) GetNotice(id int) (*NoticeData, error) {
+func (au *Aurora) GetNotice(id int) (int, *Notice, error) {
 	buf, err := newRequest("GET",
 		fmt.Sprintf("%s/api/app/noticesent/%d", strings.TrimSuffix(BaseURL, "/"), id),
 		nil,
 		nil,
 		headers)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP get image request failed: %w", err)
+		return 0, nil, fmt.Errorf("HTTP get image request failed: %w", err)
 	}
 
 	//fmt.Printf("Response: %s\n", string(buf))
@@ -153,12 +174,12 @@ func (au *Aurora) GetNotice(id int) (*NoticeData, error) {
 	}
 
 	if err := json.Unmarshal(buf, &resp); err != nil {
-		return nil, fmt.Errorf("JSON unmarshal failed: %w", err)
+		return 0, nil, fmt.Errorf("JSON unmarshal failed: %w", err)
 	}
 
 	//fmt.Printf("%+v\n", resp)
 
-	return &resp.Data, nil
+	return resp.Data.Id, &resp.Data.Notice, nil
 }
 
 func (au *Aurora) DeleteIds(ids []int) error {
@@ -182,8 +203,8 @@ func (au *Aurora) DeleteIds(ids []int) error {
 	return nil
 }
 
-func (au *Aurora) GenHtml(notice *NoticeData, imgs map[string][]byte) (string, error) {
-	htmlBody := []byte(notice.Notice.Description)
+func (au *Aurora) GenHtml(notice *Notice, imgs map[string][]byte) (string, error) {
+	htmlBody := []byte(notice.Description)
 	//fmt.Printf("%s\n", htmlBody)
 
 	re := regexp.MustCompile(` *style="[^"]*" *`)
@@ -197,7 +218,7 @@ func (au *Aurora) GenHtml(notice *NoticeData, imgs map[string][]byte) (string, e
 
 	//fmt.Printf("\n\n%s\n", htmlBody)
 
-	title := notice.Notice.Title
+	title := notice.Title
 	htmlDoc := fmt.Sprintf(`<html>
 <head>
 <title>%s</title>

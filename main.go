@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	configFile = "config.json"
+	defaultConfigFile = "config.json"
 )
 
 type config struct {
@@ -49,7 +50,7 @@ func sendEmail(title string, htmlBody string, attachments map[string][]byte, con
 	return id, err
 }
 
-func readConfig() (*config, error) {
+func readConfig(configFile string) (*config, error) {
 	rawConfig, err := os.ReadFile(configFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %q: %w", configFile, err)
@@ -65,15 +66,27 @@ func readConfig() (*config, error) {
 }
 
 func main() {
-	outFile := flag.String("output", "", "Write HTML notice to the specified output file prefix")
+	configFile := flag.String("config", defaultConfigFile, "Config file name")
+	outDir := flag.String("output", ".", "Write HTML notices to the specified directory")
 	deleteNotices := flag.Bool("delete", false, "Delete notice")
 	txEmail := flag.Bool("email", false, "Send email with the notice")
 	flag.Parse()
 
-	log.Printf("Reading config %q", configFile)
-	config, err := readConfig()
+	log.Printf("Reading config %q", *configFile)
+	config, err := readConfig(*configFile)
 	if err != nil {
 		log.Fatalf("Read config failed: %+v", err)
+	}
+
+	if *outDir != "" {
+		st, err := os.Stat(*outDir)
+		if err != nil {
+			log.Fatalf("stat failed: %v", err)
+		}
+
+		if !st.IsDir() {
+			log.Fatalf("The specified output %q is not a directory", *outDir)
+		}
 	}
 
 	aur := aurora.Aurora{
@@ -85,26 +98,32 @@ func main() {
 		log.Fatalf("Aurora login failed: %+v", err)
 	}
 
-	log.Printf("Get notices")
-	notices, err := aur.GetNotices()
+	log.Printf("Checking notices")
+	ids, err := aur.CheckNotices()
 	if err != nil {
-		log.Fatalf("Aurora get notices failed: %+v", err)
+		log.Fatalf("Check notices failed: %+v", err)
 	}
-	log.Printf("Got %d notices", len(notices))
 
-	for k, n := range notices {
-		log.Printf("Getting notice ID %d", n.Id)
-		fatNotice, err := aur.GetNotice(n.Id)
+	if len(ids) == 0 {
+		log.Printf("No notices found, nothing to do, exiting")
+		os.Exit(0)
+	}
+
+	log.Printf("Found %d notices", len(ids))
+
+	for _, id := range ids {
+		log.Printf("Getting notice ID %d", id)
+		retId, notice, err := aur.GetNotice(id)
 		if err != nil {
-			log.Fatalf("Get notice ID %d failed: %v", n.Id, err)
+			log.Fatalf("Get notice failed: %v", err)
 		}
-		notice := fatNotice.Notice
-		id := fatNotice.Id
 
-		log.Printf("Entry key %s - notice ID %d,%d - %s - %q\n", k, notice.Id, n.Id, n.SendDate, notice.Title)
+		if id != retId {
+			log.Fatalf("Expected ID %d but found %d", id, retId)
+		}
 
 		var allFiles map[string][]byte
-		allFiles, err = aur.GetAllImages(&notice)
+		allFiles, err = aur.GetAllImages(notice)
 		if err != nil {
 			log.Fatalf("Get all images failed: %v", err)
 		}
@@ -122,20 +141,18 @@ func main() {
 		}
 
 		log.Printf("Generating HTML for notice ID %d", notice.Id)
-		htmlDoc, err := aur.GenHtml(fatNotice, nil)
+		htmlDoc, err := aur.GenHtml(notice, nil)
 		if err != nil {
 			log.Fatalf("Aurora gen HTML failed: %+v", err)
 		}
 
-		if *outFile != "" {
-			filename := *outFile
-			if len(notices) > 1 {
-				filename = fmt.Sprintf("%d-%s", id, filename)
-			}
-			log.Printf("Writing HTML notice ID %d to file %s", id, filename)
+		if *outDir != "" {
+			path := filepath.Join(*outDir, fmt.Sprintf("%d.html", id))
 
-			if err := os.WriteFile(filename, []byte(htmlDoc), 0o664); err != nil {
-				log.Fatalf("Writing file failed: %v", err)
+			log.Printf("Writing HTML notice to file %q", path)
+
+			if err := os.WriteFile(path, []byte(htmlDoc), 0o664); err != nil {
+				log.Fatalf("Writing file %q failed: %v", path, err)
 			}
 		}
 
@@ -150,9 +167,9 @@ func main() {
 		}
 
 		if *deleteNotices {
-			log.Printf("Deleting notice ID: %d", fatNotice.Id)
+			log.Printf("Deleting notice ID: %d", id)
 
-			if err := aur.DeleteIds([]int{fatNotice.Id}); err != nil {
+			if err := aur.DeleteIds([]int{id}); err != nil {
 				log.Fatalf("Aurora delete ID failed: %+v", err)
 			}
 		}
