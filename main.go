@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,19 +11,11 @@ import (
 	"time"
 
 	"localhost/aurora/pkg/aurora"
+	"localhost/aurora/pkg/config"
 	"localhost/aurora/pkg/types"
 
 	"github.com/mailgun/mailgun-go/v3"
 )
-
-const (
-	defaultConfigFile = "config.json"
-)
-
-type config struct {
-	Aurora types.AuroraConfig
-	Email  types.EmailConfig
-}
 
 func sendEmail(title string, htmlBody string, attachments map[string][]byte, config *types.EmailConfig) (string, error) {
 	mg := mailgun.NewMailgun(config.Domain, config.ApiKey)
@@ -50,32 +41,25 @@ func sendEmail(title string, htmlBody string, attachments map[string][]byte, con
 	return id, err
 }
 
-func readConfig(configFile string) (*config, error) {
-	rawConfig, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %q: %w", configFile, err)
-	}
-
-	config := config{}
-
-	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to json unmarshal: %w", err)
-	}
-
-	return &config, nil
-}
-
 func main() {
-	configFile := flag.String("config", defaultConfigFile, "Config file name")
+	var err error
+	configFile := flag.String("config", "", "Config file name")
 	outDir := flag.String("output", ".", "Write HTML notices to the specified directory")
 	deleteNotices := flag.Bool("delete", false, "Delete notice")
 	txEmail := flag.Bool("email", false, "Send email with the notice")
 	flag.Parse()
 
-	log.Printf("Reading config %q", *configFile)
-	config, err := readConfig(*configFile)
+	config := config.Config{}
+	if *configFile == "" {
+		log.Print("Reading config from env vars")
+		err = config.FromEnvs()
+	} else {
+		log.Printf("Reading config from file %q", *configFile)
+		err = config.FromFile(*configFile)
+	}
+
 	if err != nil {
-		log.Fatalf("Read config failed: %+v", err)
+		log.Fatalf("Reading config failed: %+v", err)
 	}
 
 	if *outDir != "" {
