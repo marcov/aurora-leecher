@@ -16,13 +16,6 @@ import (
 	"github.com/mailgun/mailgun-go/v3"
 )
 
-type runMode struct {
-	ConfigFile    string `json:"configFile"`
-	OutDir        string `json:"outDir"`
-	DeleteNotices bool   `json:"deleteNotices"`
-	TxEmail       bool   `json:"txEmail"`
-}
-
 func sendEmail(title string, htmlBody string, attachments map[string][]byte, config *types.EmailConfig) (string, error) {
 	mg := mailgun.NewMailgun(config.Domain, config.ApiKey)
 	mg.SetAPIBase(mailgun.APIBaseEU)
@@ -47,32 +40,35 @@ func sendEmail(title string, htmlBody string, attachments map[string][]byte, con
 	return id, err
 }
 
-func Run(mode runMode) error {
+func Run(ConfigFile string, OutDir string, DeleteNotices bool, TxEmail bool, Recipients []string) error {
 	var err error
 
-	log.Printf("Run mode: %+v", mode)
-
 	config := config.Config{}
-	if mode.ConfigFile == "" {
+	if ConfigFile == "" {
 		log.Print("Reading config from env vars")
 		err = config.FromEnvs()
 	} else {
-		log.Printf("Reading config from file %q", mode.ConfigFile)
-		err = config.FromFile(mode.ConfigFile)
+		log.Printf("Reading config from file %q", ConfigFile)
+		err = config.FromFile(ConfigFile)
+	}
+
+	if len(Recipients) > 0 {
+		log.Printf("Overriding config email recipients with %+v", Recipients)
+		config.Email.To = Recipients
 	}
 
 	if err != nil {
 		return fmt.Errorf("reading config failed: %w", err)
 	}
 
-	if mode.OutDir != "" {
-		st, err := os.Stat(mode.OutDir)
+	if OutDir != "" {
+		st, err := os.Stat(OutDir)
 		if err != nil {
 			return fmt.Errorf("stat failed: %v", err)
 		}
 
 		if !st.IsDir() {
-			return fmt.Errorf("the specified output %q is not a directory", mode.OutDir)
+			return fmt.Errorf("the specified output %q is not a directory", OutDir)
 		}
 	}
 
@@ -133,8 +129,8 @@ func Run(mode runMode) error {
 			return fmt.Errorf("aurora gen HTML failed: %w", err)
 		}
 
-		if mode.OutDir != "" {
-			path := filepath.Join(mode.OutDir, fmt.Sprintf("%d.html", id))
+		if OutDir != "" {
+			path := filepath.Join(OutDir, fmt.Sprintf("%d.html", id))
 
 			log.Printf("Writing HTML notice to file %q", path)
 
@@ -143,7 +139,7 @@ func Run(mode runMode) error {
 			}
 		}
 
-		if mode.TxEmail {
+		if TxEmail {
 			log.Printf("Sending e-mail")
 			emailID, err := sendEmail(notice.Title, htmlDoc, allFiles, &(config.Email))
 			if err != nil {
@@ -153,7 +149,7 @@ func Run(mode runMode) error {
 			log.Printf("Sent email ID: %v", emailID)
 		}
 
-		if mode.DeleteNotices {
+		if DeleteNotices {
 			log.Printf("Deleting notice ID: %d", id)
 
 			if err := aur.DeleteIds([]int{id}); err != nil {

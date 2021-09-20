@@ -14,14 +14,7 @@ func main() {
 	txEmail := flag.Bool("email", false, "Send email with the notice")
 	flag.Parse()
 
-	mode := runMode{
-		ConfigFile:    *configFile,
-		OutDir:        *outDir,
-		DeleteNotices: *deleteNotices,
-		TxEmail:       *txEmail,
-	}
-
-	if err := Run(mode); err != nil {
+	if err := Run(*configFile, *outDir, *deleteNotices, *txEmail, nil); err != nil {
 		log.Fatalf("%v", err)
 	}
 }
