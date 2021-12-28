@@ -17,19 +17,18 @@ clean:
 	rm -f $(APPS) $(ZIP_FILE)
 
 .PHONY: zip
-zip: $(ZIP_FILE)
+lambda-zip: $(ZIP_FILE)
 
 $(ZIP_FILE): aurora_lambda
 	zip -r $@ $^
 
-.PHONY: upload
-upload: $(ZIP_FILE)
+.PHONY: lambda-upload
+lambda-upload: $(ZIP_FILE)
 	aws lambda update-function-code \
 		--function-name $(LAMBDA_FUNCTION_NAME) \
 		--zip-file fileb://$<
 
-LAMBDA_TEST_URL := https://22rxq63y4d.execute-api.eu-central-1.amazonaws.com/test/aurora
-
+LAMBDA_TEST_URL := https://22rxq63y4d.execute-api.eu-central-1.amazonaws.com/test/$(LAMBDA_FUNCTION_NAME)
 .PHONY: lambda-test
 lambda-test:
 	curl -v -X POST --data-ascii "{\"txEmail\": true}" $(LAMBDA_TEST_URL)
