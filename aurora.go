@@ -16,6 +16,10 @@ import (
 	"github.com/mailgun/mailgun-go/v3"
 )
 
+var (
+	ErrNoNotices = fmt.Errorf("no notices found")
+)
+
 func sendEmail(title string, htmlBody string, attachments map[string][]byte, config *types.EmailConfig) (string, error) {
 	mg := mailgun.NewMailgun(config.Domain, config.ApiKey)
 	mg.SetAPIBase(mailgun.APIBaseEU)
@@ -88,8 +92,7 @@ func Run(ConfigFile string, OutDir string, DeleteNotices bool, TxEmail bool, Rec
 	}
 
 	if len(ids) == 0 {
-		log.Printf("No notices found, nothing to do, exiting")
-		return nil
+		return ErrNoNotices
 	}
 
 	log.Printf("Found %d notices", len(ids))

@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 )
 
 func main() {
@@ -14,7 +15,13 @@ func main() {
 	txEmail := flag.Bool("email", false, "Send email with the notice")
 	flag.Parse()
 
-	if err := Run(*configFile, *outDir, *deleteNotices, *txEmail, nil); err != nil {
-		log.Fatalf("%v", err)
+	err := Run(*configFile, *outDir, *deleteNotices, *txEmail, nil)
+	if err == nil {
+		return
+	}
+
+	log.Printf("%v", err)
+	if err != ErrNoNotices {
+		os.Exit(1)
 	}
 }

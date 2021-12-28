@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"net/http"
 )
 
 type lambdaEvent struct {
@@ -19,7 +21,24 @@ type lambdaEvent struct {
 	Recipients    []string `json:"recipients"`
 }
 
-func handleRequest(evt lambdaEvent) (string, error) {
+// Add a helper for handling errors. This logs any error to os.Stderr
+// and returns a 500 Internal Server Error response that the AWS API
+// Gateway understands.
+func serverError(err error) (events.APIGatewayProxyResponse, error) {
+	log.Printf("Returning error: %+v", err.Error())
+
+	sc := http.StatusInternalServerError
+	if err == ErrNoNotices {
+		sc = http.StatusNotModified
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: sc,
+		Body:       fmt.Sprintf("%+v", err),
+	}, nil
+}
+
+func handleRequest(evt lambdaEvent) (events.APIGatewayProxyResponse, error) {
 	log.Printf("Raw event: %+v", evt)
 
 	// if it is a HTTP request, unmarshal the body
@@ -28,16 +47,20 @@ func handleRequest(evt lambdaEvent) (string, error) {
 		err := json.Unmarshal([]byte(evt.Body), &evt)
 		if err != nil {
 			err = fmt.Errorf("json unmarshal failed: %w", err)
-			return fmt.Sprintf("Aurora failed: %+v", err), err
+			return serverError(err)
 		}
 	}
 
 	err := Run(evt.ConfigFile, evt.OutDir, evt.DeleteNotices, evt.TxEmail, evt.Recipients)
 	if err != nil {
-		return fmt.Sprintf("Aurora failed: %+v", err), err
+		return serverError(err)
 	}
 
-	return "Aurora sucess", nil
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       "aurora success",
+		//Body:       string(js),
+	}, nil
 }
 
 func main() {
