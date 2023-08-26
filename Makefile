@@ -9,17 +9,22 @@ all: $(APPS)
 aurora: $(SRCS)
 	go build -tags "aurora" -o $@
 
-aurora_lambda: $(SRCS)
-	GOOS="linux" GOARCH="amd64" go build -tags "lambda" -o $@
+# The lambda runtime provided.al2 needs the application to be called "bootstrap"
+.PHONY: aurora_lambda
+aurora_lambda: bootstrap
+
+# arm64 if it's configured to run on Graviton2
+bootstrap: $(SRCS)
+	GOOS=linux GOARCH=arm64 go build -tags "lambda" -o $@
 
 .PHONY: clean
 clean:
-	rm -f $(APPS) $(ZIP_FILE)
+	rm -f aurora bootstrap $(ZIP_FILE)
 
 .PHONY: zip
 lambda-zip: $(ZIP_FILE)
 
-$(ZIP_FILE): aurora_lambda
+$(ZIP_FILE): bootstrap
 	zip -r $@ $^
 
 .PHONY: lambda-upload
@@ -32,3 +37,8 @@ LAMBDA_TEST_URL := https://22rxq63y4d.execute-api.eu-central-1.amazonaws.com/tes
 .PHONY: lambda-test
 lambda-test:
 	curl -v -X POST --data-ascii "{\"txEmail\": true}" $(LAMBDA_TEST_URL)
+
+.PHONY: lambda-invoke
+lambda-invoke:
+	aws lambda invoke --function-name aurora /dev/stdout --log-type Tail
+
