@@ -130,7 +130,7 @@ func (au *Aurora) CheckNotices() ([]int, error) {
 			data = append(data, n)
 		}
 	} else {
-		log.Printf("JSON unmarshal key-value format failed: %v, trying array format", err)
+		log.Printf("JSON map unmarshal failed: %v, falling back to array unmarshal", err)
 
 		var respAsArray struct {
 			Message string       `json:"message"`
@@ -140,6 +140,8 @@ func (au *Aurora) CheckNotices() ([]int, error) {
 		if err := json.Unmarshal(buf, &respAsArray); err != nil {
 			return nil, fmt.Errorf("JSON unmarshal array format failed: %w", err)
 		}
+
+		log.Printf("array unmarshal OK")
 
 		data = respAsArray.Data
 	}
