@@ -1,3 +1,4 @@
+//go:build lambda
 // +build lambda
 
 package main
@@ -39,7 +40,7 @@ func serverError(err error) (events.APIGatewayProxyResponse, error) {
 }
 
 func handleRequest(evt lambdaEvent) (events.APIGatewayProxyResponse, error) {
-	log.Println("called handle request")
+	log.Print("called handle request")
 	log.Printf("Raw event: %+v", evt)
 
 	// if it is a HTTP request, unmarshal the body
@@ -66,6 +67,6 @@ func handleRequest(evt lambdaEvent) (events.APIGatewayProxyResponse, error) {
 
 func main() {
 	fmt.Println("main_lambda.go started!")
-	log.Println("calling lambda Start handle request")
+	log.Print("calling lambda Start handle request")
 	lambda.Start(handleRequest)
 }
