@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"io/fs"
 
 	"localhost/aurora/pkg/aurora"
 	"localhost/aurora/pkg/config"
@@ -32,9 +33,37 @@ func sendEmail(title string, htmlBody string, attachments map[string][]byte, con
 
 	m.SetHtml(htmlBody)
 
+	// remove previously created temp dir if it's there.
+	// then, create a new empty one
+	auroraTmpDir := "/tmp/aurora"
+	_, err := os.Stat(auroraTmpDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("failed to stat %s: %w", auroraTmpDir, err)
+		}
+	} else {
+		if err := os.RemoveAll(auroraTmpDir); err != nil {
+			return "", fmt.Errorf("failed to remove dir %s: %w", auroraTmpDir, err)
+		}
+	}
+
+	err = os.Mkdir(auroraTmpDir, fs.FileMode(0755))
+	if err != nil {
+		return "", fmt.Errorf("failed to mkdir %s: %w", auroraTmpDir, err)
+	}
+
 	for name, buf := range attachments {
-		log.Printf("email attaching file %q [%d]", name, len(buf))
-		m.AddBufferAttachment(name, buf)
+		if strings.HasSuffix(name, "jpg") {
+			// Add inline image in a Gmail friendly way, using CID
+			filepath := fmt.Sprintf("%s/%s", auroraTmpDir, name)
+			if err := os.WriteFile(filepath, buf, fs.FileMode(0644)); err != nil {
+				return "", fmt.Errorf("failed to create file %s: %w", filepath, err)
+			}
+			m.AddInline(filepath)
+		} else {
+			log.Printf("email attaching file %q [%d]", name, len(buf))
+			m.AddBufferAttachment(name, buf)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -114,20 +143,8 @@ func Run(ConfigFile string, OutDir string, DeleteNotices bool, TxEmail bool, Rec
 			return fmt.Errorf("get all images failed: %v", err)
 		}
 
-		for _, f := range notice.NoticeFiles {
-			filename := fmt.Sprintf("%d.%s", f.Id, f.Extension)
-			log.Printf("Getting file %q", filename)
-			buf, err := aur.GetNoticeFile(f.Id)
-			if err != nil {
-				log.Printf("Get file %q failed: %v", filename, err)
-			} else {
-				allFiles[filename] = buf
-				log.Printf("Got file %q [%d]", filename, len(buf))
-			}
-		}
-
 		log.Printf("Generating HTML for notice ID %d", notice.Id)
-		htmlDoc, err := aur.GenHtml(notice, nil)
+		htmlDoc, err := aur.GenHtml(notice, allFiles)
 		if err != nil {
 			return fmt.Errorf("aurora gen HTML failed: %w", err)
 		}
@@ -139,6 +156,18 @@ func Run(ConfigFile string, OutDir string, DeleteNotices bool, TxEmail bool, Rec
 
 			if err := os.WriteFile(path, []byte(htmlDoc), 0o664); err != nil {
 				return fmt.Errorf("writing file %q failed: %v", path, err)
+			}
+		}
+
+		for _, f := range notice.NoticeFiles {
+			filename := fmt.Sprintf("%d.%s", f.Id, f.Extension)
+			log.Printf("Getting file %q", filename)
+			buf, err := aur.GetNoticeFile(f.Id)
+			if err != nil {
+				log.Printf("Get file %q failed: %v", filename, err)
+			} else {
+				allFiles[filename] = buf
+				log.Printf("Got file %q [%d]", filename, len(buf))
 			}
 		}
 

@@ -2,7 +2,6 @@ package aurora
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -233,9 +232,13 @@ func (au *Aurora) GenHtml(notice *Notice, imgs map[string][]byte) (string, error
 %s
 `, title, title, htmlBody)
 
-	for name, buf := range imgs {
-		htmlDoc += fmt.Sprintf(`<img src="data:image/jpg;base64,%s" alt="img %s">`,
-			base64.RawStdEncoding.EncodeToString(buf), name)
+	for name := range imgs {
+	//for name, buf := range imgs {
+		// base64 unsupported on Gmail
+		//htmlDoc += fmt.Sprintf(`<img src="data:image/jpg;base64,%s" alt="img %s">`,
+		//	base64.RawStdEncoding.EncodeToString(buf), name)
+
+		htmlDoc += fmt.Sprintf(`<img src="cid:%s" alt="img %s">`, name,  name)
 	}
 
 	htmlDoc += `
