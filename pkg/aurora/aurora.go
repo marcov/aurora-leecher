@@ -33,6 +33,9 @@ type Notice struct {
 		Extension string
 		size      int
 	}
+	NoticeImages     []struct {
+		ImageName string
+	}
 }
 
 type NoticeData struct {
@@ -250,6 +253,20 @@ func (au *Aurora) GetAllImages(notice *Notice) (map[string][]byte, error) {
 		log.Printf("Getting image %q", name)
 
 		buf, err := au.GetImage("galleries", au.Config.ActivityId, name)
+		if err != nil {
+			// ignore failures
+			log.Printf("Get image %q failed: %v", name, err)
+		} else {
+			log.Printf("Got image %q [%d]", name, len(buf))
+			images[name] = buf
+		}
+	}
+
+	for _, item := range notice.NoticeImages {
+		name := item.ImageName
+		log.Printf("Getting image %q", name)
+
+		buf, err := au.GetImage("notices", notice.Id, name)
 		if err != nil {
 			// ignore failures
 			log.Printf("Get image %q failed: %v", name, err)
