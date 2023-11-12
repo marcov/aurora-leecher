@@ -40,19 +40,20 @@ lambda-test:
 
 .PHONY: lambda-invoke
 lambda-invoke:
-	aws lambda invoke --function-name aurora /dev/stdout --log-type Tail
+	aws lambda invoke --function-name $(LAMBDA_FUNCTION_NAME) /dev/stdout --log-type Tail
 
 .PHONY: lambda-logs
 lambda-logs:
 	get_log_stream() { \
 		set -x; \
 		local -r log_stream_name="$$(aws logs describe-log-streams \
-				--log-group-name '/aws/lambda/aurora' \
+				--log-group-name '/aws/lambda/$(LAMBDA_FUNCTION_NAME)' \
 				--query 'logStreams[*].logStreamName' | \
 			jq -r '.[-1]'\
 		)"; \
 		aws logs get-log-events \
-			--log-group-name '/aws/lambda/aurora' \
+			--log-group-name '/aws/lambda/$(LAMBDA_FUNCTION_NAME)' \
 			--log-stream-name "$${log_stream_name}" | \
-			jq -r '.events | .[].message'; \
+			jq -r '.events | .[].message' | \
+			sed '/^$$/d'; \
 	}; get_log_stream
